@@ -1,6 +1,7 @@
 # Zentro — AI-Enhanced B2C Marketplace
 
 [![Tests](https://img.shields.io/badge/backend%20tests-48%2F48%20passed-emerald?style=for-the-badge&logo=pytest)](https://github.com/usman2-tech/zentro)
+[![Docker](https://img.shields.io/badge/docker-PostgreSQL%20%2B%20pgvector-2496ED?style=for-the-badge&logo=docker)](https://github.com/usman2-tech/zentro)
 [![Next.js](https://img.shields.io/badge/frontend-Next.js%2014-black?style=for-the-badge&logo=next.js)](https://github.com/usman2-tech/zentro)
 [![FastAPI](https://img.shields.io/badge/backend-FastAPI%200.115-009688?style=for-the-badge&logo=fastapi)](https://github.com/usman2-tech/zentro)
 [![TypeScript](https://img.shields.io/badge/types-TypeScript%205.6-blue?style=for-the-badge&logo=typescript)](https://github.com/usman2-tech/zentro)
@@ -19,11 +20,11 @@
 5. [Database Architecture & Dual-Engine Strategy](#5-database-architecture--dual-engine-strategy)
 6. [System Architecture & Layering](#6-system-architecture--layering)
 7. [Repository Structure](#7-repository-structure)
-8. [Prerequisites & System Requirements](#8-prerequisites--system-requirements)
-9. [Local Installation & Setup](#9-local-installation--setup)
+8. [Docker & Containerized Quickstart (PostgreSQL + pgvector)](#8-docker--containerized-quickstart-postgresql--pgvector)
+9. [Local Prerequisites & Native Host Setup (SQLite Fallback)](#9-local-prerequisites--native-host-setup-sqlite-fallback)
 10. [Environment Variables](#10-environment-variables)
 11. [Database Migrations & Seed Data](#11-database-migrations--seed-data)
-12. [Running the Application](#12-running-the-application)
+12. [Running the Application Locally](#12-running-the-application-locally)
 13. [Interactive API Documentation (Swagger/OpenAPI)](#13-interactive-api-documentation-swaggeropenapi)
 14. [Demo Credentials](#14-demo-credentials)
 15. [Automated Testing & Verification Results](#15-automated-testing--verification-results)
@@ -197,11 +198,21 @@ Database Engine (PostgreSQL + pgvector / SQLite + NumPy)
 
 ```text
 zentro/
+├── .dockerignore                # Root docker ignore rules
+├── .env.example                 # Root Docker & environment configuration template
 ├── .gitignore                   # Safe exclusions (.env, node_modules, *.db, *.tsbuildinfo)
+├── docker-compose.yml           # Root Docker Compose (frontend, backend, PostgreSQL + pgvector)
 ├── README.md                    # Project documentation
 │
+├── docker/                      # Container initialization scripts
+│   └── postgres/
+│       └── init-pgvector.sql    # Automatically creates 'vector' extension on first boot
+│
 ├── backend/                     # FastAPI Backend Application
+│   ├── .dockerignore            # Backend-specific container ignore
 │   ├── .env.example             # Safe placeholder environment template
+│   ├── Dockerfile               # Production Python 3.11-slim container with healthchecks
+│   ├── docker-entrypoint.sh     # TCP database readiness wait, Alembic migrations & auto-seed
 │   ├── alembic.ini              # Database migration configuration
 │   ├── requirements.txt         # Pinned Python dependencies
 │   ├── alembic/                 # Async Alembic migrations
@@ -235,11 +246,13 @@ zentro/
 │       └── verify_db.py         # Standalone database integrity verifier
 │
 └── frontend/                    # Next.js 14 Frontend Application
+    ├── .dockerignore            # Frontend-specific container ignore
     ├── .env.example             # Frontend environment template
+    ├── Dockerfile               # Multi-stage standalone Node 20-alpine container
     ├── package.json             # NPM dependencies & scripts
     ├── tsconfig.json            # Strict TypeScript configuration
     ├── tailwind.config.ts       # Custom Tailwind theme & colors
-    ├── next.config.mjs          # Next.js configuration & Unsplash image domains
+    ├── next.config.mjs          # Standalone output & Unsplash image domains
     └── src/
         ├── types/               # TypeScript interfaces
         ├── lib/                 # Typed API client & formatting utilities
@@ -264,18 +277,92 @@ zentro/
             └── register/        # Customer registration
 ```
 
+## 8. Docker & Containerized Quickstart (PostgreSQL + pgvector)
+
+The entire Zentro marketplace stack is fully containerized for local development, technical evaluation, and production-grade reproducibility.
+
+### Stack Architecture
+
+```
+                  ┌───────────────────────────────────────────────┐
+                  │                Host Browser                   │
+                  │            http://localhost:3000              │
+                  └───────────────┬───────────────────────────────┘
+                                  │
+                 HTTP :3000       │       HTTP :8000
+        ┌─────────────────────────┴───────────────────────────────┐
+        │                                                         │
+        ▼                                                         ▼
+┌───────────────────────────────┐       ┌────────────────────────────────────────────────┐
+│   zentro-frontend             │       │   zentro-backend                               │
+│   (Next.js 14 Standalone)     │──────▶│   (FastAPI + Python 3.11-slim)                 │
+│   Port: 3000                  │  API  │   Port: 8000                                   │
+└───────────────────────────────┘       └───────────────────────┬────────────────────────┘
+                                                                │
+                                              TCP :5432         │  postgresql+asyncpg
+                                        (zentro-network bridge) │
+                                                                ▼
+                                        ┌────────────────────────────────────────────────┐
+                                        │   zentro-db                                    │
+                                        │   (PostgreSQL 16 + pgvector)                   │
+                                        │   Port: 5432 (mapped to host)                  │
+                                        │   Volume: postgres_data                        │
+                                        └────────────────────────────────────────────────┘
+```
+
+### Docker Prerequisites
+* **Docker Desktop** or **Docker Engine**: version 24.0+
+* **Docker Compose**: version 2.20+ (included with Docker Desktop)
+
+### Quick Start (One Command)
+
+```bash
+# 1. Clone the repository and enter the directory
+git clone https://github.com/usman2-tech/zentro.git
+cd zentro
+
+# 2. Copy the root environment file
+cp .env.example .env
+
+# 3. Build images and start the full stack
+docker compose up --build -d
+```
+
+Once launched:
+* **Marketplace Web App**: [`http://localhost:3000`](http://localhost:3000)
+* **Backend API & Health**: [`http://localhost:8000/health`](http://localhost:8000/health)
+* **Interactive Swagger UI**: [`http://localhost:8000/docs`](http://localhost:8000/docs)
+* **PostgreSQL + pgvector**: `localhost:5432` (`postgres` / `postgres`, database: `zentro`)
+
+> [!NOTE]
+> On initial container startup, `backend/docker-entrypoint.sh` automatically polls the PostgreSQL TCP socket until ready, applies `alembic upgrade head`, and seeds the complete marketplace catalog (56 products, 8 categories, 10 businesses, 16 feed posts, and demo accounts).
+
+### Docker Management Commands
+
+| Action | Command |
+| :--- | :--- |
+| **View Service Status & Health** | `docker compose ps` |
+| **Follow Live Container Logs** | `docker compose logs -f` |
+| **Follow Backend Logs Only** | `docker compose logs -f backend` |
+| **Run Migrations Manually** | `docker compose exec backend alembic upgrade head` |
+| **Re-seed Marketplace Data** | `docker compose exec backend python app/db/seed/run_seed.py` |
+| **Verify pgvector in PostgreSQL** | `docker compose exec db psql -U postgres -d zentro -c "\dx vector"` |
+| **Run Backend Tests in Docker** | `docker compose exec backend pytest -v` |
+| **Stop All Containers** | `docker compose down` |
+| **Reset Database & Volumes** | `docker compose down -v` |
+| **Rebuild After Code Changes** | `docker compose up --build -d` |
+
 ---
 
-## 8. Prerequisites & System Requirements
+## 9. Local Prerequisites & Native Host Setup (SQLite Fallback)
 
+If you prefer developing without Docker, Zentro supports direct execution on your host machine with an automatic SQLite + NumPy vector similarity fallback.
+
+### Host Prerequisites
 * **Python**: 3.10 or higher
 * **Node.js**: v18.18.0 or higher (v20+ recommended; verified on `v20.18.0`)
 * **Package Managers**: `pip` (Python) and `npm` (Node.js)
-* **Operating System**: macOS, Linux, or Windows (tested and verified on Windows 11)
-
----
-
-## 9. Local Installation & Setup
+* **Operating System**: macOS, Linux, or Windows (verified on Windows 11)
 
 ### Step 1: Clone the Repository
 ```bash
