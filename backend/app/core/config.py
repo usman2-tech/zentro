@@ -35,6 +35,29 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_URL", mode="after")
     @classmethod
     def assemble_database_url(cls, v: str) -> str:
+        # Normalize PostgreSQL URL scheme for asyncpg
+        if v.startswith("postgres://"):
+            v = "postgresql+asyncpg://" + v[len("postgres://"):]
+        elif v.startswith("postgresql://") and not v.startswith("postgresql+"):
+            v = "postgresql+asyncpg://" + v[len("postgresql://"):]
+
+        # Normalize Neon / libpq query parameters for asyncpg compatibility
+        if "postgresql+asyncpg://" in v and "?" in v:
+            from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+            parsed = urlparse(v)
+            if parsed.query:
+                params = parse_qs(parsed.query)
+                clean_params = {}
+                for k, vals in params.items():
+                    if k in ("sslmode", "ssl"):
+                        clean_params["ssl"] = "require"
+                    elif k in ("channel_binding", "gssencmode", "target_session_attrs"):
+                        continue
+                    else:
+                        clean_params[k] = vals[-1]
+                new_query = urlencode(clean_params)
+                v = urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+
         if v.startswith("sqlite") and "///." in v:
             # Anchored to backend root directory
             rel_part = v.split("///.")[1].lstrip("/\\")
