@@ -1,5 +1,18 @@
 from fastapi import APIRouter
-from app.routers import auth, businesses, cart, categories, feed, health, orders, products, search, wishlist
+from app.routers import (
+    ai,
+    auth,
+    businesses,
+    cart,
+    categories,
+    feed,
+    health,
+    orders,
+    products,
+    recommendations,
+    search,
+    wishlist,
+)
 
 api_router = APIRouter()
 
@@ -20,3 +33,7 @@ api_router.include_router(search.router)
 api_router.include_router(cart.router)
 api_router.include_router(orders.router)
 api_router.include_router(wishlist.router)
+
+# AI & Recommendations
+api_router.include_router(ai.router)
+api_router.include_router(recommendations.router)
