@@ -47,7 +47,6 @@ app.add_exception_handler(Exception, generic_exception_handler)
 
 # Top-level Health and Root Route
 app.include_router(health_router, tags=["Health"])
-app.include_router(auth_router, include_in_schema=False)
 
 
 @app.get("/", tags=["System"])
@@ -63,5 +62,6 @@ async def root() -> JSONResponse:
     )
 
 
-# API v1 routes
+# API routes: versioned (/api/v1) and convenient top-level aliases
 app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(api_router, include_in_schema=False)
